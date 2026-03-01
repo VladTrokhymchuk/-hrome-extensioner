@@ -1,227 +1,193 @@
-// function updateIcon(isOn) {
-//     const path = isOn
-//         ? {
-//             "16": "icons/hidden-16-red.png",
-//             "32": "icons/hidden-32-red.png",
-//             "48": "icons/hidden-48-red.png",
-//             "128": "icons/hidden-128-red.png"
-//         }
-//         : {
-//             "16": "icons/visible-16.png",
-//             "32": "icons/visible-32.png",
-//             "48": "icons/visible-48.png",
-//             "128": "icons/visible-128.png"
-//         };
+// --- Status config ---
 
-//     chrome.action.setIcon({ path });
-// }
+const STATUS = {
+    hidden: {
+        icon: 'green',
+        dotColor: '#4ade80',
+        title: 'Адмін-бар прихований\nКлік — показати',
+    },
+    visible: {
+        icon: 'red',
+        dotColor: '#f87171',
+        title: 'Адмін-бар видимий\nКлік — приховати',
+    },
+    login: {
+        icon: 'def',
+        dotColor: '#fbbf24',
+        title: 'Не авторизовано\nКлік — відкрити сторінку входу',
+    },
+    admin: {
+        icon: 'def',
+        dotColor: '#818cf8',
+        title: 'Адмін-панель WordPress\nАдмін-бар завжди видимий',
+    },
+    inactive: {
+        icon: 'def',
+        dotColor: null,
+        title: 'WP Admin Bar',
+    },
+};
 
-// // при запуску
-// chrome.runtime.onInstalled.addListener(() => {
-//     chrome.storage.sync.get(["wpAdminBarHideOn"]).then((data) => {
-//         updateIcon(Boolean(data?.wpAdminBarHideOn));
-//     });
-// });
+// --- Icon rendering via OffscreenCanvas ---
 
-// // при зміні стану
-// chrome.storage.onChanged.addListener((changes, areaName) => {
-//     if (areaName === "sync" && changes.wpAdminBarHideOn) {
-//         updateIcon(Boolean(changes.wpAdminBarHideOn.newValue));
-//     }
-// });
+const bitmapCache = new Map();
 
-
-// // // додаэ квадр над іконкою і передає колір статусу
-// // function updateActionBackground(isOn) {
-// //     if (isOn) {
-// //         chrome.action.setBadgeBackgroundColor({ color: "#22c55e" }); // зелений
-// //         chrome.action.setBadgeText({ text: " " }); // пробіл, щоб фон був видимий
-// //     } else {
-// //         chrome.action.setBadgeBackgroundColor({ color: "#ef4444" }); // червоний
-// //         chrome.action.setBadgeText({ text: " " });
-// //     }
-// // }
-
-// // // при запуску
-// // chrome.runtime.onInstalled.addListener(() => {
-// //     chrome.storage.sync.get(["wpAdminBarHideOn"]).then((data) => {
-// //         updateActionBackground(Boolean(data?.wpAdminBarHideOn));
-// //     });
-// // });
-
-// // // при зміні стану
-// // chrome.storage.onChanged.addListener((changes, areaName) => {
-// //     if (areaName === "sync" && changes.wpAdminBarHideOn) {
-// //         updateActionBackground(Boolean(changes.wpAdminBarHideOn.newValue));
-// //     }
-// // });
-
-function getIconPathForStatus(status) {
-    if (status === 'red') {
-        return {
-            "16": "icons/visible-16-red.png",
-            "32": "icons/visible-32-red.png",
-            "48": "icons/visible-48-red.png",
-            "128": "icons/visible-128-red.png"
-        };
-    }
-    if (status === 'green') {
-        return {
-            "16": "icons/visible-16-green.png",
-            "32": "icons/visible-32-green.png",
-            "48": "icons/visible-48-green.png",
-            "128": "icons/visible-128-green.png"
-        };
-    }
-    return {
-        "16": "icons/visible-16-def.png",
-        "32": "icons/visible-32-def.png",
-        "48": "icons/visible-48-def.png",
-        "128": "icons/visible-128-def.png"
-    };
+async function getBaseBitmap(size, iconColor) {
+    const key = `${size}-${iconColor}`;
+    if (bitmapCache.has(key)) return bitmapCache.get(key);
+    const suffix = iconColor === 'green' ? '-green' : iconColor === 'red' ? '-red' : '-def';
+    const url = chrome.runtime.getURL(`icons/visible-${size}${suffix}.png`);
+    const blob = await fetch(url).then(r => r.blob());
+    const bitmap = await createImageBitmap(blob);
+    bitmapCache.set(key, bitmap);
+    return bitmap;
 }
 
-async function detectAdminBarInTab(tabId) {
+async function buildIconImageData(iconColor, dotColor) {
+    const sizes = [16, 32, 48, 128];
+    const imageData = {};
+    await Promise.all(sizes.map(async (size) => {
+        const bitmap = await getBaseBitmap(size, iconColor);
+        const canvas = new OffscreenCanvas(size, size);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0, size, size);
+
+        if (dotColor) {
+            const r = Math.max(2, Math.round(size * 0.14));
+            const pad = Math.round(size * 0.07);
+            const cx = size - r - pad;
+            const cy = size - r - pad;
+
+            // white ring for contrast
+            ctx.beginPath();
+            ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            // colored dot
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fillStyle = dotColor;
+            ctx.fill();
+        }
+
+        imageData[size] = ctx.getImageData(0, 0, size, size);
+    }));
+    return imageData;
+}
+
+// --- Helpers ---
+
+function isChromeUrl(urlString) {
     try {
-        const resp = await chrome.tabs.sendMessage(tabId, { type: 'check-admin-bar' });
-        return Boolean(resp && resp.hasAdminBar);
+        const { protocol } = new URL(urlString);
+        return protocol === 'chrome:' || protocol === 'chrome-extension:';
+    } catch (_) {
+        return true;
+    }
+}
+
+function isWpAdminUrl(urlString) {
+    try {
+        return new URL(urlString).pathname.startsWith('/wp-admin');
     } catch (_) {
         return false;
     }
 }
 
-async function computeStatusForTab(tab) {
-    try {
-        const url = new URL(tab.url || '');
-        if (url.protocol === 'chrome:' || url.protocol === 'chrome-extension:') {
-            return 'def';
-        }
-    } catch (_) {
-        return 'def';
-    }
-
-    const hasAdminBar = await detectAdminBarInTab(tab.id);
-    const data = await chrome.storage.sync.get(["wpAdminBarHideOn"]);
-    const isHidden = Boolean(data?.wpAdminBarHideOn);
-
-    // Reflect stored state even if admin bar is absent
-    return isHidden ? 'green' : 'red';
-}
-
-async function updateActionIconForTab(tab) {
-    if (!tab || !tab.id) return;
-    const status = await computeStatusForTab(tab);
-    const path = getIconPathForStatus(status);
-    chrome.action.setIcon({ path, tabId: tab.id }).catch(() => { });
-}
-
-async function updateActionIconForActiveTab() {
-    try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab) await updateActionIconForTab(tab);
-    } catch (_) { }
-}
-
-async function updateActionIconForAllTabs() {
-    try {
-        const tabs = await chrome.tabs.query({});
-        await Promise.all(tabs.map((tab) => updateActionIconForTab(tab)));
-    } catch (_) { }
-}
-
-async function updateGlobalIconFromStorage() {
-    try {
-        const data = await chrome.storage.sync.get(["wpAdminBarHideOn"]);
-        const isHidden = Boolean(data?.wpAdminBarHideOn);
-        const path = getIconPathForStatus(isHidden ? 'green' : 'red');
-        await chrome.action.setIcon({ path });
-    } catch (_) { }
-}
-
-chrome.runtime.onInstalled.addListener(updateActionIconForActiveTab);
-chrome.runtime.onStartup.addListener(updateActionIconForActiveTab);
-
-chrome.storage.onChanged.addListener(async (changes, areaName) => {
-    if (areaName === "sync" && changes.wpAdminBarHideOn) {
-        await Promise.all([
-            updateActionIconForAllTabs(),
-            updateGlobalIconFromStorage()
-        ]);
-    }
-});
-
-chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-    try {
-        const tab = await chrome.tabs.get(tabId);
-        await updateActionIconForTab(tab);
-    } catch (_) { }
-});
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete' || changeInfo.url) {
-        await updateActionIconForTab(tab);
-    }
-});
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message && message.type === 'report-admin-status') {
-        (async () => {
-            try {
-                const tabId = sender?.tab?.id;
-                if (!tabId) return;
-                const data = await chrome.storage.sync.get(["wpAdminBarHideOn"]);
-                const isHidden = Boolean(data?.wpAdminBarHideOn);
-                const status = isHidden ? 'green' : 'red';
-                const path = getIconPathForStatus(status);
-                chrome.action.setIcon({ path, tabId }).catch(() => { });
-            } catch (_) { }
-        })();
-    }
-});
-
-async function getActiveTab() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab;
-}
-
-function buildWpAdminUrlFrom(urlString) {
+function buildLoginUrl(urlString) {
     try {
         const url = new URL(urlString);
-        if (url.protocol === 'chrome:' || url.protocol === 'chrome-extension:') return null;
         url.hash = '';
         url.search = '';
-        url.pathname = '/wp-admin/';
+        url.pathname = '/wp-login.php';
         return url.toString();
     } catch (_) {
         return null;
     }
 }
 
-async function handleActionClick() {
-    const tab = await getActiveTab();
-    if (!tab || !tab.id || !tab.url) return;
+async function getIsHidden() {
+    const data = await chrome.storage.sync.get(['wpAdminBarHideOn']);
+    return Boolean(data?.wpAdminBarHideOn);
+}
 
-    let hasAdminBar = false;
+async function checkAdminBarInTab(tabId) {
     try {
-        const resp = await chrome.tabs.sendMessage(tab.id, { type: 'check-admin-bar' });
-        hasAdminBar = Boolean(resp && resp.hasAdminBar);
+        const resp = await chrome.tabs.sendMessage(tabId, { type: 'check-admin-bar' });
+        return Boolean(resp?.hasAdminBar);
     } catch (_) {
-        hasAdminBar = false;
-    }
-
-    if (hasAdminBar) {
-        const data = await chrome.storage.sync.get(["wpAdminBarHideOn"]);
-        const next = !Boolean(data?.wpAdminBarHideOn);
-        await chrome.storage.sync.set({ wpAdminBarHideOn: next });
-        await updateActionIconForTab(tab);
-    } else {
-        const target = buildWpAdminUrlFrom(tab.url);
-        if (target) {
-            chrome.tabs.update(tab.id, { url: target });
-        }
+        return false;
     }
 }
 
-chrome.action.onClicked.addListener(() => {
-    handleActionClick();
+async function resolveStatus(tab) {
+    if (!tab?.url || isChromeUrl(tab.url)) return 'inactive';
+    if (isWpAdminUrl(tab.url)) return 'admin';
+    const hasAdminBar = await checkAdminBarInTab(tab.id);
+    if (!hasAdminBar) return 'login';
+    return (await getIsHidden()) ? 'hidden' : 'visible';
+}
+
+async function applyStatusToTab(tabId, statusKey) {
+    const s = STATUS[statusKey];
+    const imageData = await buildIconImageData(s.icon, s.dotColor);
+    await Promise.allSettled([
+        chrome.action.setIcon({ imageData, tabId }),
+        chrome.action.setBadgeText({ text: '', tabId }),
+        chrome.action.setTitle({ title: s.title, tabId }),
+    ]);
+}
+
+async function updateTab(tab) {
+    if (!tab?.id || !tab.url) return;
+    const status = await resolveStatus(tab);
+    await applyStatusToTab(tab.id, status);
+}
+
+async function updateAllTabs() {
+    try {
+        const tabs = await chrome.tabs.query({});
+        await Promise.all(tabs.map(updateTab));
+    } catch (_) { }
+}
+
+// --- Click handler ---
+
+chrome.action.onClicked.addListener(async (tab) => {
+    if (!tab?.id || !tab.url) return;
+    if (isChromeUrl(tab.url)) return;
+    if (isWpAdminUrl(tab.url)) return;
+
+    const hasAdminBar = await checkAdminBarInTab(tab.id);
+    if (hasAdminBar) {
+        await chrome.storage.sync.set({ wpAdminBarHideOn: !(await getIsHidden()) });
+    } else {
+        const loginUrl = buildLoginUrl(tab.url);
+        if (loginUrl) chrome.tabs.update(tab.id, { url: loginUrl });
+    }
+});
+
+// --- Lifecycle ---
+
+chrome.runtime.onInstalled.addListener(updateAllTabs);
+chrome.runtime.onStartup.addListener(updateAllTabs);
+
+chrome.storage.onChanged.addListener(async (changes, areaName) => {
+    if (areaName === 'sync' && 'wpAdminBarHideOn' in changes) {
+        await updateAllTabs();
+    }
+});
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+    try {
+        const tab = await chrome.tabs.get(tabId);
+        await updateTab(tab);
+    } catch (_) { }
+});
+
+chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete') {
+        await updateTab(tab);
+    }
 });

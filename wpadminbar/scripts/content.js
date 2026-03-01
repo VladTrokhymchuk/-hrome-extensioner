@@ -1,5 +1,6 @@
 (function () {
     const STYLE_ID = 'wpadminbar-toggle-style';
+    const isWpAdmin = window.location.pathname.startsWith('/wp-admin');
 
     function ensureStyleElement() {
         let style = document.getElementById(STYLE_ID);
@@ -12,63 +13,31 @@
     }
 
     function applyHide() {
-        const style = ensureStyleElement();
-        // Hide #wpadminbar and reset html margin-top per requirements
-        style.textContent = `#wpadminbar { display: none !important; } html { margin-top: 0px !important; }`;
+        if (isWpAdmin) return;
+        ensureStyleElement().textContent =
+            '#wpadminbar { display: none !important; } html { margin-top: 0px !important; }';
     }
 
     function removeHide() {
         const style = document.getElementById(STYLE_ID);
-        if (style) {
-            style.textContent = '';
-        }
-    }
-
-    function updateFromState(isOn) {
-        if (isOn) {
-            applyHide();
-        } else {
-            removeHide();
-        }
+        if (style) style.textContent = '';
     }
 
     chrome.storage.sync.get(['wpAdminBarHideOn']).then((data) => {
-        updateFromState(Boolean(data?.wpAdminBarHideOn));
+        if (Boolean(data?.wpAdminBarHideOn)) applyHide();
+        else removeHide();
     });
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName !== 'sync') return;
-        if (Object.prototype.hasOwnProperty.call(changes, 'wpAdminBarHideOn')) {
-            updateFromState(Boolean(changes.wpAdminBarHideOn.newValue));
-            reportIconStatus();
-        }
+        if (areaName !== 'sync' || !Object.prototype.hasOwnProperty.call(changes, 'wpAdminBarHideOn')) return;
+        if (Boolean(changes.wpAdminBarHideOn.newValue)) applyHide();
+        else removeHide();
     });
 
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (message && message.type === 'check-admin-bar') {
-            const hasAdminBar = Boolean(document.getElementById('wpadminbar'));
-            sendResponse({ hasAdminBar });
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        if (message?.type === 'check-admin-bar') {
+            sendResponse({ hasAdminBar: Boolean(document.getElementById('wpadminbar')) });
         }
         return false;
     });
-
-    function reportIconStatus() {
-        const hasAdminBar = Boolean(document.getElementById('wpadminbar'));
-        chrome.storage.sync.get(['wpAdminBarHideOn']).then((data) => {
-            const isHidden = Boolean(data?.wpAdminBarHideOn);
-            chrome.runtime.sendMessage({
-                type: 'report-admin-status',
-                hasAdminBar,
-                isHidden
-            });
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', reportIconStatus, { once: true });
-    } else {
-        reportIconStatus();
-    }
 })();
-
-
