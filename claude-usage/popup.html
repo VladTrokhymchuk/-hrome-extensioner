@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <title>Claude Usage</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        width: 280px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+        color: #1a1a1a;
+        background: #fff;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 14px 10px;
+        border-bottom: 1px solid #eee;
+      }
+      header .logo { font-size: 20px; }
+      header h1 { font-size: 14px; font-weight: 600; flex: 1; }
+      header .badge {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 99px;
+        background: #f0f0f0;
+        color: #666;
+      }
+
+      .section { padding: 12px 14px; border-bottom: 1px solid #eee; }
+      .section:last-child { border-bottom: none; }
+
+      .label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: #999;
+        margin-bottom: 8px;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .stat {
+        background: #f7f7f7;
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      .stat .value {
+        font-size: 18px;
+        font-weight: 700;
+        color: #d97706;
+        line-height: 1.1;
+      }
+      .stat .name {
+        font-size: 10px;
+        color: #888;
+        margin-top: 2px;
+      }
+
+      .stat.full {
+        grid-column: span 2;
+      }
+      .stat.full .value { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+
+      .banner {
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 8px;
+        padding: 8px 10px;
+        color: #9a3412;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .headers-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .header-row {
+        display: flex;
+        justify-content: space-between;
+        background: #f7f7f7;
+        border-radius: 6px;
+        padding: 5px 8px;
+        gap: 8px;
+      }
+      .header-row .hk { color: #666; word-break: break-all; }
+      .header-row .hv { color: #d97706; font-weight: 600; flex-shrink: 0; }
+
+      .empty {
+        text-align: center;
+        padding: 20px 14px;
+        color: #aaa;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .empty a { color: #d97706; text-decoration: none; }
+      .empty a:hover { text-decoration: underline; }
+
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px;
+        background: #fafafa;
+        border-top: 1px solid #eee;
+      }
+      .ts { font-size: 10px; color: #bbb; }
+      .btn {
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        background: #fff;
+        color: #666;
+        cursor: pointer;
+      }
+      .btn:hover { background: #f5f5f5; }
+
+      .big-stat {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 8px;
+      }
+      .big-sub { font-size: 16px; font-weight: 400; color: #999; }
+
+      .bar-wrap {
+        height: 8px;
+        background: #f0f0f0;
+        border-radius: 99px;
+        overflow: hidden;
+        margin-bottom: 4px;
+      }
+      .bar-fill { height: 100%; border-radius: 99px; transition: width .3s; }
+      .bar-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #999;
+      }
+
+      .reset-row {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #666;
+      }
+      .reset-row strong { color: #1a1a1a; }
+
+      .kv-list { display: flex; flex-direction: column; gap: 4px; }
+      .kv-row {
+        display: flex;
+        justify-content: space-between;
+        background: #f7f7f7;
+        border-radius: 6px;
+        padding: 5px 8px;
+        gap: 8px;
+      }
+      .kk { color: #666; word-break: break-all; font-size: 11px; }
+      .kv { color: #d97706; font-weight: 600; font-size: 11px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="logo">🤖</span>
+      <h1>Claude Usage</h1>
+      <span class="badge" id="status">—</span>
+    </header>
+
+    <div id="main"></div>
+
+    <footer>
+      <span class="ts" id="ts">Немає даних</span>
+      <button class="btn" id="clearBtn">Очистити</button>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
