@@ -1,0 +1,46 @@
+{
+    "manifest_version": 3,
+    "name": "WP Admin Bar Toggle",
+    "version": "1.0.0",
+    "description": "Приховує/показує WordPress admin bar (#wpadminbar) і скидає margin-top у html.",
+    "action": {
+        "default_title": "WP Admin Bar",
+        "default_icon": {
+            "16": "icons/visible-16-def.png",
+            "32": "icons/visible-32-def.png",
+            "48": "icons/visible-48-def.png",
+            "128": "icons/visible-128-def.png"
+        }
+    },
+    "permissions": [
+        "storage",
+        "tabs"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "scripts/service_worker.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "scripts/content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "icons/*.png"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ]
+}
